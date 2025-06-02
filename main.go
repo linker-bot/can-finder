@@ -92,7 +92,7 @@ func main() {
 	r.GET("/ws", wsHandler)
 
 	r.GET("/ping", func(c *gin.Context) {
-		c.String(200, "test")
+		c.String(200, "pong")
 	})
 
 	r.NoRoute(func(c *gin.Context) {
