@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -30,9 +31,9 @@ var upgrader = websocket.Upgrader{
 
 var clients = make(map[*websocket.Conn]bool)
 
-func udpListener() {
+func udpListener(port int) {
 	addr := net.UDPAddr{
-		Port: 9999,
+		Port: port,
 		IP:   net.ParseIP("0.0.0.0"),
 	}
 	conn, err := net.ListenUDP("udp4", &addr)
@@ -42,7 +43,7 @@ func udpListener() {
 	defer conn.Close()
 
 	buf := make([]byte, 1024)
-	log.Println("开始监听设备广播...")
+	log.Printf("开始监听设备广播，端口: %d...", port)
 
 	for {
 		n, _, err := conn.ReadFromUDP(buf)
@@ -83,7 +84,14 @@ func wsHandler(c *gin.Context) {
 }
 
 func main() {
-	go udpListener()
+	var httpPort int
+	var udpPort int
+
+	flag.IntVar(&httpPort, "http-port", 18080, "HTTP监听端口")
+	flag.IntVar(&udpPort, "udp-port", 9999, "UDP监听端口")
+	flag.Parse()
+
+	go udpListener(udpPort)
 
 	r := gin.Default()
 
@@ -116,5 +124,5 @@ func main() {
 		c.Redirect(http.StatusMovedPermanently, "/")
 	})
 
-	r.Run(":18080")
+	r.Run(fmt.Sprintf(":%d", httpPort))
 }
