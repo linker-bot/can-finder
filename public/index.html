@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>设备发现列表 - 灵心巧手</title>
+    <meta charset="UTF-8">
+    <style>
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 8px; border: 1px solid #ccc; }
+        th { background-color: #f4f4f4; }
+    </style>
+</head>
+<body>
+    <h1>灵心巧手设备列表</h1>
+    <table id="deviceTable">
+        <thead>
+            <tr>
+                <th>设备名</th>
+                <th>IP</th>
+                <th>MAC</th>
+                <th>型号</th>
+                <th>版本</th>
+                <th>首次发现时间</th>
+                <th>最后活跃时间</th>
+            </tr>
+        </thead>
+        <tbody id="devices"></tbody>
+    </table>
+
+    <script>
+        const socket = new WebSocket('ws://localhost:18080/ws');
+        const devices = {};
+
+        socket.onmessage = function(event) {
+            const device = JSON.parse(event.data);
+            const now = new Date().toLocaleString();
+            const deviceKey = device.mac;
+
+            if (!devices[deviceKey]) {
+                devices[deviceKey] = {
+                    ...device,
+                    firstSeen: now,
+                    lastSeen: now
+                };
+
+                const row = document.createElement('tr');
+                row.id = `device-${deviceKey}`;
+                row.innerHTML = `
+                    <td>${device.name}</td>
+                    <td>${device.ip}</td>
+                    <td>${device.mac}</td>
+                    <td>${device.model}</td>
+                    <td>${device.version}</td>
+                    <td>${now}</td>
+                    <td>${now}</td>
+                `;
+                document.getElementById('devices').appendChild(row);
+            } else {
+                devices[deviceKey].lastSeen = now;
+                const row = document.getElementById(`device-${deviceKey}`);
+                row.cells[6].textContent = now;
+            }
+        };
+
+        socket.onerror = function(event) {
+            console.error("WebSocket 错误:", event);
+        };
+    </script>
+</body>
+</html>
