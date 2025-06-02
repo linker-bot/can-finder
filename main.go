@@ -95,6 +95,22 @@ func main() {
 		c.String(200, "pong")
 	})
 
+	r.GET("/config", func(c *gin.Context) {
+		callback := c.Query("callback")
+		host := c.Request.Host
+
+		if callback == "" {
+			c.JSON(400, gin.H{"error": "callback parameter required"})
+			return
+		}
+
+		data := gin.H{
+			"host": host,
+		}
+
+		c.JSONP(200, data)
+	})
+
 	r.NoRoute(func(c *gin.Context) {
 		fmt.Printf("%s doesn't exists, redirect on /\n", c.Request.URL.Path)
 		c.Redirect(http.StatusMovedPermanently, "/")
