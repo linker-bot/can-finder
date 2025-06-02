@@ -27,43 +27,60 @@
     </table>
 
     <script>
-        const socket = new WebSocket('ws://localhost:18080/ws');
-        const devices = {};
+        async function initWebSocket() {
+            try {
+                const response = await fetch('/config?callback=init');
+                const configText = await response.text();
+                const configJSON = JSON.parse(configText.match(/init\((.*)\)/)[1]);
+                const wsHost = configJSON.host;
 
-        socket.onmessage = function(event) {
-            const device = JSON.parse(event.data);
-            const now = new Date().toLocaleString();
-            const deviceKey = device.mac;
+                const socket = new WebSocket(`ws://${wsHost}/ws`);
+                const devices = {};
 
-            if (!devices[deviceKey]) {
-                devices[deviceKey] = {
-                    ...device,
-                    firstSeen: now,
-                    lastSeen: now
+                socket.onmessage = function(event) {
+                    const device = JSON.parse(event.data);
+                    const now = new Date().toLocaleString();
+                    const deviceKey = device.mac;
+
+                    if (!devices[deviceKey]) {
+                        devices[deviceKey] = {
+                            ...device,
+                            firstSeen: now,
+                            lastSeen: now
+                        };
+
+                        const row = document.createElement('tr');
+                        row.id = `device-${deviceKey}`;
+                        row.innerHTML = `
+                            <td>${device.name}</td>
+                            <td>${device.ip}</td>
+                            <td>${device.mac}</td>
+                            <td>${device.model}</td>
+                            <td>
+                                <a href="https://github.com/linker-bot/can-bridge/releases/tag/v1.2.1/${device.version}" target="_blank">
+                                    ${device.version}
+                                </a>
+                            </td>
+                            <td>${now}</td>
+                            <td>${now}</td>
+                        `;
+                        document.getElementById('devices').appendChild(row);
+                    } else {
+                        devices[deviceKey].lastSeen = now;
+                        const row = document.getElementById(`device-${deviceKey}`);
+                        row.cells[6].textContent = now;
+                    }
                 };
 
-                const row = document.createElement('tr');
-                row.id = `device-${deviceKey}`;
-                row.innerHTML = `
-                    <td>${device.name}</td>
-                    <td>${device.ip}</td>
-                    <td>${device.mac}</td>
-                    <td>${device.model}</td>
-                    <td>${device.version}</td>
-                    <td>${now}</td>
-                    <td>${now}</td>
-                `;
-                document.getElementById('devices').appendChild(row);
-            } else {
-                devices[deviceKey].lastSeen = now;
-                const row = document.getElementById(`device-${deviceKey}`);
-                row.cells[6].textContent = now;
+                socket.onerror = function(event) {
+                    console.error("WebSocket 错误:", event);
+                };
+            } catch (error) {
+                console.error("配置初始化失败：", error);
             }
-        };
+        }
 
-        socket.onerror = function(event) {
-            console.error("WebSocket 错误:", event);
-        };
+        initWebSocket();
     </script>
 </body>
 </html>

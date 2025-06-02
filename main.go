@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -16,6 +17,7 @@ import (
 //go:embed public
 var EmbedFS embed.FS
 
+// DeviceInfo holds device information from UDP broadcasts
 type DeviceInfo struct {
 	Name    string `json:"name"`
 	IP      string `json:"ip"`
@@ -30,30 +32,31 @@ var upgrader = websocket.Upgrader{
 
 var clients = make(map[*websocket.Conn]bool)
 
-func udpListener() {
+// udpListener listens for UDP broadcasts from devices
+func udpListener(port int) {
 	addr := net.UDPAddr{
-		Port: 9999,
+		Port: port,
 		IP:   net.ParseIP("0.0.0.0"),
 	}
 	conn, err := net.ListenUDP("udp4", &addr)
 	if err != nil {
-		log.Fatalf("监听UDP失败: %v", err)
+		log.Fatalf("❌ UDP listener failed to start on port %d: %v", port, err)
 	}
 	defer conn.Close()
 
-	buf := make([]byte, 1024)
-	log.Println("开始监听设备广播...")
+	buffer := make([]byte, 1024)
+	log.Printf("📡 Listening for device broadcasts on UDP port %d", port)
 
 	for {
-		n, _, err := conn.ReadFromUDP(buf)
+		n, _, err := conn.ReadFromUDP(buffer)
 		if err != nil {
-			log.Printf("接收失败: %v", err)
+			log.Printf("⚠️ Error receiving UDP broadcast: %v", err)
 			continue
 		}
 
 		var device DeviceInfo
-		if err := json.Unmarshal(buf[:n], &device); err != nil {
-			log.Printf("JSON解析失败: %v", err)
+		if err := json.Unmarshal(buffer[:n], &device); err != nil {
+			log.Printf("⚠️ Failed to parse device info: %v", err)
 			continue
 		}
 
@@ -64,10 +67,11 @@ func udpListener() {
 	}
 }
 
+// wsHandler handles WebSocket upgrade requests and client management
 func wsHandler(c *gin.Context) {
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		log.Println("升级失败:", err)
+		log.Printf("⚠️ WebSocket upgrade failed: %v", err)
 		return
 	}
 	defer conn.Close()
@@ -82,23 +86,47 @@ func wsHandler(c *gin.Context) {
 	}
 }
 
+// main initializes and starts the HTTP and UDP services
 func main() {
-	go udpListener()
+	var httpPort int
+	var udpPort int
 
+	flag.IntVar(&httpPort, "http-port", 6200, "Port for HTTP server")
+	flag.IntVar(&udpPort, "udp-port", 9999, "Port for UDP listener")
+	flag.Parse()
+
+	log.Printf("🚀 Starting device discovery service")
+
+	go udpListener(udpPort)
+
+	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
 
 	r.GET("/", static.ServeEmbed("public", EmbedFS))
-
 	r.GET("/ws", wsHandler)
 
 	r.GET("/ping", func(c *gin.Context) {
-		c.String(200, "test")
+		c.String(http.StatusOK, "pong")
+	})
+
+	r.GET("/config", func(c *gin.Context) {
+		callback := c.Query("callback")
+		host := c.Request.Host
+
+		if callback == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "callback parameter required"})
+			return
+		}
+
+		data := gin.H{"host": host}
+		c.JSONP(http.StatusOK, data)
 	})
 
 	r.NoRoute(func(c *gin.Context) {
-		fmt.Printf("%s doesn't exists, redirect on /\n", c.Request.URL.Path)
+		log.Printf("🔄 Redirecting unknown route '%s' to '/'", c.Request.URL.Path)
 		c.Redirect(http.StatusMovedPermanently, "/")
 	})
 
-	r.Run(":18080")
+	log.Printf("🌐 HTTP server running on port %d", httpPort)
+	r.Run(fmt.Sprintf(":%d", httpPort))
 }
